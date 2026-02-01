@@ -48,16 +48,31 @@ def trigger_github_workflow(session_id: str, service: str, workflow_data: dict):
         print(f"GITHUB_REPO: {GITHUB_REPO}")
         return False
     
-    url = f"https://api.github.com/repos/{GITHUB_REPO}/actions/workflows/upload.yml/dispatches"
-    
+    # Get default branch
+    repo_url = f"https://api.github.com/repos/{GITHUB_REPO}"
     headers = {
         'Accept': 'application/vnd.github.v3+json',
         'Authorization': f'token {GH_PAT}',
         'Content-Type': 'application/json'
     }
     
+    try:
+        repo_response = requests.get(repo_url, headers=headers)
+        if repo_response.status_code == 200:
+            default_branch = repo_response.json().get('default_branch', 'main')
+            print(f"✅ Detected default branch: {default_branch}")
+        else:
+            # Fallback: try both main and master
+            default_branch = 'main'
+            print(f"⚠️ Could not detect branch, using: {default_branch}")
+    except:
+        default_branch = 'main'
+        print(f"⚠️ Error detecting branch, using: {default_branch}")
+    
+    url = f"https://api.github.com/repos/{GITHUB_REPO}/actions/workflows/upload.yml/dispatches"
+    
     payload = {
-        'ref': 'main',
+        'ref': default_branch,
         'inputs': {
             'session_id': session_id,
             'service': service,
@@ -67,16 +82,28 @@ def trigger_github_workflow(session_id: str, service: str, workflow_data: dict):
     
     try:
         print(f"🔄 Triggering workflow at: {url}")
-        print(f"📦 Payload: {json.dumps(payload, indent=2)}")
+        print(f"📦 Branch: {default_branch}")
         
         response = requests.post(url, headers=headers, json=payload)
         
         print(f"📊 Response status: {response.status_code}")
-        print(f"📄 Response body: {response.text}")
         
         if response.status_code == 204:
             print("✅ Workflow triggered successfully!")
             return True
+        elif response.status_code == 422 and default_branch == 'main':
+            # Try with master branch
+            print("⚠️ Trying with 'master' branch...")
+            payload['ref'] = 'master'
+            response = requests.post(url, headers=headers, json=payload)
+            
+            if response.status_code == 204:
+                print("✅ Workflow triggered successfully with 'master' branch!")
+                return True
+            else:
+                print(f"❌ Failed with status {response.status_code}")
+                print(f"Error: {response.text}")
+                return False
         else:
             print(f"❌ Failed with status {response.status_code}")
             print(f"Error: {response.text}")
