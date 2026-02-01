@@ -49,7 +49,7 @@ Buka Settings → Secrets and variables → Actions → New repository secret
 - `TELEGRAM_API_ID` - API ID dari my.telegram.org
 - `TELEGRAM_API_HASH` - API Hash dari my.telegram.org
 - `TELEGRAM_STRING_SESSION` - String session dari generate_session.py
-- `GITHUB_TOKEN` - GitHub Personal Access Token (buat di Settings → Developer settings → Personal access tokens → Generate new token)
+- `GH_PAT` - GitHub Personal Access Token (buat di Settings → Developer settings → Personal access tokens → Generate new token)
 
 **Optional (API Keys untuk services):**
 - `PIXELDRAIN_API_KEY` - https://pixeldrain.com/user/api_keys
@@ -74,27 +74,39 @@ AUTHORIZED_USERS=123456789,987654321
 
 ### 4. Deploy Bot
 
-#### Opsi 1: Local (Development)
+#### Opsi 1: Setup Otomatis (Recommended)
+```bash
+# Jalankan setup script
+bash setup.sh
+```
+
+#### Opsi 2: Manual Install
 ```bash
 # Install dependencies
 pip install -r requirements.txt
 
+# Copy environment template
+cp .env.example .env
+
+# Edit .env dengan credentials kamu
+nano .env
+
 # Jalankan bot
-python bot_improved.py
+python bot.py
 ```
 
-#### Opsi 2: VPS/Server
+#### Opsi 3: VPS/Server
 ```bash
 # Install dependencies
 pip install -r requirements.txt
 
 # Jalankan dengan screen/tmux
 screen -S telegram-bot
-python bot_improved.py
+python bot.py
 # Ctrl+A+D untuk detach
 ```
 
-#### Opsi 3: Docker
+#### Opsi 4: Docker
 ```bash
 docker build -t telegram-upload-bot .
 docker run -d --env-file .env telegram-upload-bot
@@ -149,7 +161,7 @@ Ketika upload dimulai, bot akan memberi Session ID:
 | `TELEGRAM_API_ID` | ✅ | API ID dari my.telegram.org |
 | `TELEGRAM_API_HASH` | ✅ | API Hash dari my.telegram.org |
 | `TELEGRAM_STRING_SESSION` | ✅ | String session untuk userbot |
-| `GITHUB_TOKEN` | ✅ | GitHub Personal Access Token |
+| `GH_PAT` | ✅ | GitHub Personal Access Token |
 | `GITHUB_REPO` | ✅ | Format: username/repo-name |
 | `AUTHORIZED_USERS` | ❌ | User IDs yang diizinkan (comma separated) |
 | `PIXELDRAIN_API_KEY` | ❌ | PixelDrain API key |
@@ -169,6 +181,26 @@ PIXELDRAIN_API_KEY (optional)
 GOFILE_API_KEY (optional)
 CATBOX_USER_HASH (optional)
 ```
+
+## Optional: Install cryptg untuk Performance
+
+Package `cryptg` memberikan enkripsi lebih cepat untuk Telethon, tapi butuh Rust compiler.
+
+**Jika kamu punya Rust compiler:**
+```bash
+bash install-cryptg.sh
+```
+
+**Install Rust (jika belum punya):**
+```bash
+# Ubuntu/Debian
+sudo apt install rustc cargo
+
+# Atau pakai rustup
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+```
+
+**Note:** Bot akan berjalan normal tanpa cryptg, cuma sedikit lebih lambat untuk enkripsi.
 
 ## Troubleshooting
 
@@ -190,6 +222,12 @@ CATBOX_USER_HASH (optional)
 ### String session invalid
 - Generate ulang dengan `generate_session.py`
 - Pastikan tidak ada spasi atau newline di string session
+
+### Error installing cryptg
+- Package ini optional (untuk performance saja)
+- Bot akan tetap jalan tanpa cryptg
+- Install Rust compiler jika ingin pakai cryptg
+- Atau skip, tidak masalah
 
 ## Limitations
 

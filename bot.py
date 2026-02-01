@@ -10,7 +10,7 @@ from telegram.constants import ParseMode
 
 # Configuration
 TELEGRAM_BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN')
-GITHUB_TOKEN = os.environ.get('GITHUB_TOKEN')
+GH_PAT = os.environ.get('GH_PAT')
 GITHUB_REPO = os.environ.get('GITHUB_REPO')  # format: username/repo
 AUTHORIZED_USERS = os.environ.get('AUTHORIZED_USERS', '').split(',')
 
@@ -37,7 +37,7 @@ def parse_message_link(link: str):
 
 def trigger_github_workflow(session_id: str, service: str, workflow_data: dict):
     """Trigger GitHub Actions workflow via API"""
-    if not GITHUB_TOKEN or not GITHUB_REPO:
+    if not GH_PAT or not GITHUB_REPO:
         print("GitHub credentials not configured")
         return False
     
@@ -45,7 +45,7 @@ def trigger_github_workflow(session_id: str, service: str, workflow_data: dict):
     
     headers = {
         'Accept': 'application/vnd.github.v3+json',
-        'Authorization': f'token {GITHUB_TOKEN}',
+        'Authorization': f'token {GH_PAT}',
         'Content-Type': 'application/json'
     }
     
