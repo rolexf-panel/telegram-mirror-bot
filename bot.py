@@ -22,6 +22,59 @@ AUTHORIZED_USERS = os.environ.get('AUTHORIZED_USERS', '').split(',')
 # File upload sessions
 upload_sessions = {}
 
+async def animate_loading(chat_id: int, message_id: int, session_id: str, service: str, file_count: int, context):
+    """Animate loading dots while initializing"""
+    from telegram import Bot
+    
+    bot = context.bot
+    dots_states = [".", "..", "..."]
+    counter = 0
+    max_updates = 60  # Max 60 updates (about 1 minute)
+    
+    try:
+        while counter < max_updates:
+            # Check if session still exists and is processing
+            if session_id not in upload_sessions:
+                break
+            
+            if upload_sessions[session_id]['status'] != 'processing':
+                break
+            
+            dots = dots_states[counter % 3]
+            
+            status_text = f"""
+🚀 <b>Upload Dimulai!</b>
+
+🆔 <b>Session:</b> <code>{session_id}</code>
+🎯 <b>Service:</b> {service.upper()}
+📦 <b>Files:</b> {file_count}
+
+⏳ <b>Status:</b> Initializing{dots}
+📊 <b>Progress:</b> [░░░░░░░░░░] 0%
+
+🔄 GitHub Actions sedang memproses request...
+⚡ Menunggu workflow dimulai{dots}
+
+💡 Cancel: <code>/cancel_{session_id}</code>
+"""
+            
+            try:
+                await bot.edit_message_text(
+                    chat_id=chat_id,
+                    message_id=message_id,
+                    text=status_text,
+                    parse_mode=ParseMode.HTML
+                )
+            except Exception as e:
+                # Ignore telegram errors (rate limit, message not modified, etc)
+                pass
+            
+            await asyncio.sleep(1)  # Update every 1 second
+            counter += 1
+            
+    except Exception as e:
+        print(f"Error in loading animation: {e}")
+
 def generate_file_id():
     """Generate unique file ID"""
     return hashlib.md5(f"{datetime.now().isoformat()}".encode()).hexdigest()[:8]
@@ -351,25 +404,37 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             'message_id': query.message.message_id
         }
         
-        # Trigger GitHub Actions
-        success = trigger_github_workflow(session_id, session['service'], workflow_data)
-        
-        if success:
-            status_text = f"""
+        # Show initial status
+        status_text = f"""
 🚀 <b>Upload Dimulai!</b>
 
 🆔 <b>Session:</b> <code>{session_id}</code>
 🎯 <b>Service:</b> {session['service'].upper()}
 📦 <b>Files:</b> {len(session['files'])}
 
-⏳ <b>Status:</b> Initializing...
+⏳ <b>Status:</b> Initializing.
 📊 <b>Progress:</b> [░░░░░░░░░░] 0%
 
 🔄 GitHub Actions sedang memproses request...
-⚡ Progress akan diupdate setiap 5 detik
 
 💡 Cancel: <code>/cancel_{session_id}</code>
 """
+        
+        await query.edit_message_text(status_text, parse_mode=ParseMode.HTML)
+        
+        # Trigger GitHub Actions
+        success = trigger_github_workflow(session_id, session['service'], workflow_data)
+        
+        if success:
+            # Start loading animation
+            asyncio.create_task(animate_loading(
+                query.message.chat_id,
+                query.message.message_id,
+                session_id,
+                session['service'],
+                len(session['files']),
+                context
+            ))
         else:
             status_text = f"""
 ❌ <b>Gagal Memulai Upload</b>
@@ -379,8 +444,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 GitHub Actions gagal di-trigger.
 Silakan coba lagi atau hubungi admin.
 """
-        
-        await query.edit_message_text(status_text, parse_mode=ParseMode.HTML)
+            await query.edit_message_text(status_text, parse_mode=ParseMode.HTML)
         
     elif action == 'cancel':
         del upload_sessions[session_id]
