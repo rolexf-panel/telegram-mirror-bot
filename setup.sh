@@ -29,6 +29,75 @@ fi
 
 echo "✅ Dependencies installed"
 
+# Optional: Install cryptg for better performance
+echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "🚀 Optional: Install cryptg"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo ""
+echo "cryptg provides faster encryption for Telethon."
+echo "⚠️  Requires Rust compiler (rustc)"
+echo "💡 Bot works perfectly without it!"
+echo ""
+read -p "Install cryptg? (y/n) " -n 1 -r
+echo
+
+if [[ $REPLY =~ ^[Yy]$ ]]; then
+    # Check if rust is installed
+    if ! command -v rustc &> /dev/null; then
+        echo ""
+        echo "❌ Rust compiler not found!"
+        echo ""
+        echo "Install Rust first:"
+        echo "  Option 1 (Ubuntu/Debian):"
+        echo "    sudo apt install rustc cargo"
+        echo ""
+        echo "  Option 2 (Rustup - recommended):"
+        echo "    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh"
+        echo ""
+        read -p "Do you want to install Rust now? (y/n) " -n 1 -r
+        echo
+        
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            echo ""
+            echo "Installing Rust via rustup..."
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+            
+            # Source cargo env
+            source "$HOME/.cargo/env"
+            
+            if [ $? -eq 0 ]; then
+                echo "✅ Rust installed successfully!"
+            else
+                echo "❌ Failed to install Rust"
+                echo "⚠️  Skipping cryptg installation"
+                echo "💡 You can install it later with: bash install-cryptg.sh"
+            fi
+        else
+            echo "⚠️  Skipping cryptg installation"
+            echo "💡 You can install it later with: bash install-cryptg.sh"
+        fi
+    fi
+    
+    # Try to install cryptg if rust is available
+    if command -v rustc &> /dev/null; then
+        echo ""
+        echo "Installing cryptg..."
+        pip install cryptg==0.4.0
+        
+        if [ $? -eq 0 ]; then
+            echo "✅ cryptg installed successfully!"
+            echo "🚀 Encryption performance improved!"
+        else
+            echo "❌ Failed to install cryptg"
+            echo "💡 Bot will work fine without it"
+        fi
+    fi
+else
+    echo "⏭️  Skipping cryptg installation"
+    echo "💡 You can install it later with: bash install-cryptg.sh"
+fi
+
 # Check .env file
 if [ ! -f .env ]; then
     echo ""
