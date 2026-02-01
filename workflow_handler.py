@@ -6,6 +6,7 @@ import requests
 from pathlib import Path
 from datetime import datetime
 from telethon import TelegramClient
+from telethon.sessions import StringSession
 from telegram import Bot
 from telegram.constants import ParseMode
 
@@ -259,9 +260,37 @@ async def main():
     message_id = WORKFLOW_DATA['message_id']
     files = WORKFLOW_DATA['files']
     
-    # Initialize Telegram client (userbot)
-    client = TelegramClient('session', TELEGRAM_API_ID, TELEGRAM_API_HASH)
-    await client.start()
+    # Initialize Telegram client (userbot) with string session
+    client = TelegramClient(
+        StringSession(TELEGRAM_STRING_SESSION),
+        TELEGRAM_API_ID,
+        TELEGRAM_API_HASH
+    )
+    
+    # Connect without interactive login
+    await client.connect()
+    
+    # Check if authorized
+    if not await client.is_user_authorized():
+        print("❌ String session is invalid or expired!")
+        error_text = f"""
+❌ <b>Upload Failed</b>
+
+🆔 <b>Session:</b> <code>{SESSION_ID}</code>
+
+String session tidak valid atau expired.
+Silakan generate ulang string session.
+"""
+        await bot.edit_message_text(
+            chat_id=chat_id,
+            message_id=message_id,
+            text=error_text,
+            parse_mode=ParseMode.HTML
+        )
+        await client.disconnect()
+        return
+    
+    print("✅ Telegram client connected and authorized")
     
     # Get API key based on service
     api_key = None
