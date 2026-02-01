@@ -44,6 +44,8 @@ def trigger_github_workflow(session_id: str, service: str, workflow_data: dict):
     """Trigger GitHub Actions workflow via API"""
     if not GH_PAT or not GITHUB_REPO:
         print("GitHub credentials not configured")
+        print(f"GH_PAT exists: {bool(GH_PAT)}")
+        print(f"GITHUB_REPO: {GITHUB_REPO}")
         return False
     
     url = f"https://api.github.com/repos/{GITHUB_REPO}/actions/workflows/upload.yml/dispatches"
@@ -64,10 +66,26 @@ def trigger_github_workflow(session_id: str, service: str, workflow_data: dict):
     }
     
     try:
+        print(f"🔄 Triggering workflow at: {url}")
+        print(f"📦 Payload: {json.dumps(payload, indent=2)}")
+        
         response = requests.post(url, headers=headers, json=payload)
-        return response.status_code == 204
+        
+        print(f"📊 Response status: {response.status_code}")
+        print(f"📄 Response body: {response.text}")
+        
+        if response.status_code == 204:
+            print("✅ Workflow triggered successfully!")
+            return True
+        else:
+            print(f"❌ Failed with status {response.status_code}")
+            print(f"Error: {response.text}")
+            return False
+            
     except Exception as e:
-        print(f"Error triggering workflow: {e}")
+        print(f"❌ Error triggering workflow: {e}")
+        import traceback
+        traceback.print_exc()
         return False
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
