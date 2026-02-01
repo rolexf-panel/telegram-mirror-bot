@@ -51,23 +51,18 @@ class ProgressTracker:
         if total:
             self.total_size = total
         
-        # Update every 5 seconds
         current_time = datetime.now()
         if (current_time - self.last_update).total_seconds() < 5 and current < self.total_size:
             return
         
         self.last_update = current_time
-        
-        # Calculate progress
         percentage = (self.downloaded / self.total_size * 100) if self.total_size > 0 else 0
         progress_bar = self.create_progress_bar(percentage)
         
-        # Calculate speed and ETA
         elapsed = (current_time - self.start_time).total_seconds()
         speed = self.downloaded / elapsed if elapsed > 0 else 0
         remaining = (self.total_size - self.downloaded) / speed if speed > 0 else 0
         
-        # Format sizes
         downloaded_mb = self.downloaded / (1024 * 1024)
         total_mb = self.total_size / (1024 * 1024)
         speed_mb = speed / (1024 * 1024)
@@ -85,7 +80,6 @@ class ProgressTracker:
 
 🔄 Downloading from Telegram...
 """
-        
         try:
             await self.bot.edit_message_text(
                 chat_id=self.chat_id,
@@ -102,98 +96,67 @@ class FileUploader:
         self.api_key = api_key
     
     async def upload_pixeldrain(self, file_path):
-        """Upload to PixelDrain"""
         url = "https://pixeldrain.com/api/file"
-        
         with open(file_path, 'rb') as f:
             files = {'file': f}
             headers = {}
             if self.api_key:
                 headers['Authorization'] = f'Basic {self.api_key}'
-            
             response = requests.post(url, files=files, headers=headers)
-            
             if response.status_code == 201:
                 data = response.json()
-                file_id = data['id']
-                return f"https://pixeldrain.com/u/{file_id}"
-        
+                return f"https://pixeldrain.com/u/{data['id']}"
         return None
     
     async def upload_gofile(self, file_path):
-        """Upload to GoFile"""
-        # Get server
         server_response = requests.get('https://api.gofile.io/getServer')
         server = server_response.json()['data']['server']
-        
         url = f"https://{server}.gofile.io/uploadFile"
-        
         with open(file_path, 'rb') as f:
             files = {'file': f}
-            data = {}
-            if self.api_key:
-                data['token'] = self.api_key
-            
+            data = {'token': self.api_key} if self.api_key else {}
             response = requests.post(url, files=files, data=data)
-            
             if response.status_code == 200:
                 result = response.json()
                 if result['status'] == 'ok':
                     return result['data']['downloadPage']
-        
         return None
-    
+
     async def upload_catbox(self, file_path):
-        """Upload to Catbox"""
         url = "https://catbox.moe/user/api.php"
-        
         with open(file_path, 'rb') as f:
             files = {'fileToUpload': f}
-            data = {
-                'reqtype': 'fileupload',
-            }
+            data = {'reqtype': 'fileupload'}
             if self.api_key:
                 data['userhash'] = self.api_key
-            
             response = requests.post(url, files=files, data=data)
-            
             if response.status_code == 200:
                 return response.text.strip()
-        
         return None
-    
+
     async def upload_anonfiles(self, file_path):
-        """Upload to AnonFiles"""
         url = "https://api.anonfiles.com/upload"
-        
         with open(file_path, 'rb') as f:
             files = {'file': f}
             response = requests.post(url, files=files)
-            
             if response.status_code == 200:
                 data = response.json()
                 if data['status']:
                     return data['data']['file']['url']['full']
-        
         return None
-    
+
     async def upload_fileio(self, file_path):
-        """Upload to File.io"""
         url = "https://file.io"
-        
         with open(file_path, 'rb') as f:
             files = {'file': f}
             response = requests.post(url, files=files)
-            
             if response.status_code == 200:
                 data = response.json()
                 if data['success']:
                     return data['link']
-        
         return None
-    
+
     async def upload(self, file_path):
-        """Upload file to specified service"""
         upload_methods = {
             'pixeldrain': self.upload_pixeldrain,
             'gofile': self.upload_gofile,
@@ -201,35 +164,26 @@ class FileUploader:
             'anonfiles': self.upload_anonfiles,
             'fileio': self.upload_fileio
         }
-        
         method = upload_methods.get(self.service.lower())
         if method:
             return await method(file_path)
-        
         return None
 
 async def download_from_telegram(client, file_info, progress_tracker):
-    """Download file from Telegram using userbot"""
     try:
-        # Get message
         message = await client.get_messages(file_info['chat_id'], ids=file_info['message_id'])
-        
         if not message or not message.media:
             return None
         
-        # Get file name
         if hasattr(message.media, 'document'):
             filename = message.file.name or f"file_{SESSION_ID}"
             file_size = message.file.size
         else:
             filename = f"file_{SESSION_ID}"
             file_size = 0
-        
-        # Update tracker
+            
         progress_tracker.filename = filename
         progress_tracker.total_size = file_size
-        
-        # Download with progress
         file_path = DOWNLOAD_DIR / filename
         
         await client.download_media(
@@ -237,280 +191,80 @@ async def download_from_telegram(client, file_info, progress_tracker):
             file=str(file_path),
             progress_callback=lambda c, t: asyncio.create_task(progress_tracker.update_progress(c, t))
         )
-        
         return file_path
-    
     except Exception as e:
         print(f"Error downloading from Telegram: {e}")
         return None
 
 async def check_cancellation():
-    """Check if upload was cancelled"""
     cancel_file = Path(f'/tmp/cancel_queue/{SESSION_ID}.cancel')
     return cancel_file.exists()
 
 async def main():
-    """Main workflow handler"""
     print(f"Starting upload workflow for session: {SESSION_ID}")
     
     try:
-        # Initialize bot
         print("Initializing Telegram bot...")
         bot = Bot(token=TELEGRAM_BOT_TOKEN)
-        
         chat_id = WORKFLOW_DATA['chat_id']
         message_id = WORKFLOW_DATA['message_id']
         files = WORKFLOW_DATA['files']
         
-        print(f"Chat ID: {chat_id}")
-        print(f"Message ID: {message_id}")
-        print(f"Files to process: {len(files)}")
-        
-        # Initialize Telegram client (userbot) with string session
-        print("Initializing Telegram userbot client...")
-        client = TelegramClient(
-            StringSession(TELEGRAM_STRING_SESSION),
-            TELEGRAM_API_ID,
-            TELEGRAM_API_HASH
-        )
-        
-        # Connect without interactive login
-        print("Connecting to Telegram...")
+        client = TelegramClient(StringSession(TELEGRAM_STRING_SESSION), TELEGRAM_API_ID, TELEGRAM_API_HASH)
         await client.connect()
         
-        # Check if authorized
         if not await client.is_user_authorized():
-            print("❌ String session is invalid or expired!")
-            error_text = f"""
-❌ <b>Upload Failed</b>
-
-🆔 <b>Session:</b> <code>{SESSION_ID}</code>
-
-String session tidak valid atau expired.
-Silakan generate ulang string session.
-"""
-            await bot.edit_message_text(
-                chat_id=chat_id,
-                message_id=message_id,
-                text=error_text,
-                parse_mode=ParseMode.HTML
-            )
+            error_text = f"❌ <b>Upload Failed</b>\n\n🆔 <b>Session:</b> <code>{SESSION_ID}</code>\n\nString session tidak valid."
+            await bot.edit_message_text(chat_id=chat_id, message_id=message_id, text=error_text, parse_mode=ParseMode.HTML)
             await client.disconnect()
             return
-        
-        print("✅ Telegram client connected and authorized")
-    
+            
     except Exception as e:
-        print(f"❌ Error during initialization: {e}")
-        import traceback
-        traceback.print_exc()
-        
-        try:
-            error_text = f"""
-❌ <b>Upload Failed</b>
-
-🆔 <b>Session:</b> <code>{SESSION_ID}</code>
-
-Initialization error: {str(e)}
-"""
-            bot = Bot(token=TELEGRAM_BOT_TOKEN)
-            await bot.edit_message_text(
-                chat_id=WORKFLOW_DATA['chat_id'],
-                message_id=WORKFLOW_DATA['message_id'],
-                text=error_text,
-                parse_mode=ParseMode.HTML
-            )
-        except:
-            pass
+        print(f"❌ Initialization error: {e}")
         return
-    
+
+    # Mulai proses Upload
     try:
-    
-    try:
-        # Get API key based on service
         api_key = None
-        if SERVICE.lower() == 'pixeldrain':
-            api_key = PIXELDRAIN_API_KEY
-        elif SERVICE.lower() == 'gofile':
-            api_key = GOFILE_API_KEY
-        elif SERVICE.lower() == 'catbox':
-            api_key = CATBOX_USER_HASH
-        
-        print(f"Service: {SERVICE}")
-        print(f"API Key configured: {bool(api_key)}")
+        if SERVICE.lower() == 'pixeldrain': api_key = PIXELDRAIN_API_KEY
+        elif SERVICE.lower() == 'gofile': api_key = GOFILE_API_KEY
+        elif SERVICE.lower() == 'catbox': api_key = CATBOX_USER_HASH
         
         uploader = FileUploader(SERVICE, api_key)
-        
         uploaded_files = []
         
         for idx, file_info in enumerate(files, 1):
-            print(f"\n{'='*50}")
-            print(f"Processing file {idx}/{len(files)}")
-            print(f"{'='*50}")
-            
-            # Check cancellation
             if await check_cancellation():
-                status_text = f"""
-❌ <b>Upload Cancelled</b>
-
-🆔 <b>Session:</b> <code>{SESSION_ID}</code>
-📦 <b>Files processed:</b> {len(uploaded_files)}/{len(files)}
-
-Upload was cancelled by user.
-"""
-                await bot.edit_message_text(
-                    chat_id=chat_id,
-                    message_id=message_id,
-                    text=status_text,
-                    parse_mode=ParseMode.HTML
-                )
                 break
             
-            # Create progress tracker
-            progress_tracker = ProgressTracker(
-                bot, chat_id, message_id, SESSION_ID, 0, f"File {idx}"
-            )
+            progress_tracker = ProgressTracker(bot, chat_id, message_id, SESSION_ID, 0, f"File {idx}")
+            file_path = await download_from_telegram(client, file_info, progress_tracker)
             
-            # Download from Telegram
-            print(f"Downloading file {idx}/{len(files)}")
-            try:
-                file_path = await download_from_telegram(client, file_info, progress_tracker)
+            if file_path:
+                status_text = f"📤 <b>Uploading</b>\n\n🆔 <b>Session:</b> <code>{SESSION_ID}</code>\n📄 <b>File:</b> {file_path.name}\n🎯 <b>Service:</b> {SERVICE.upper()}\n\n⏳ Uploading to {SERVICE}..."
+                await bot.edit_message_text(chat_id=chat_id, message_id=message_id, text=status_text, parse_mode=ParseMode.HTML)
                 
-                if not file_path:
-                    print(f"Failed to download file {idx}")
-                    continue
-                
-                print(f"✅ Downloaded: {file_path}")
-            except Exception as e:
-                print(f"❌ Error downloading file {idx}: {e}")
-                import traceback
-                traceback.print_exc()
-                continue
-            
-            # Upload to service
-            print(f"Uploading to {SERVICE}")
-            
-            status_text = f"""
-📤 <b>Uploading</b>
-
-🆔 <b>Session:</b> <code>{SESSION_ID}</code>
-📄 <b>File:</b> {file_path.name}
-🎯 <b>Service:</b> {SERVICE.upper()}
-
-📊 <b>Progress:</b> [██████████] 100%
-⏳ Uploading to {SERVICE}...
-
-File {idx}/{len(files)}
-"""
-            
-            try:
-                await bot.edit_message_text(
-                    chat_id=chat_id,
-                    message_id=message_id,
-                    text=status_text,
-                    parse_mode=ParseMode.HTML
-                )
-            except Exception as e:
-                print(f"Error updating status: {e}")
-            
-            try:
                 upload_url = await uploader.upload(file_path)
-                
                 if upload_url:
-                    uploaded_files.append({
-                        'filename': file_path.name,
-                        'url': upload_url,
-                        'service': SERVICE
-                    })
-                    print(f"✅ Uploaded: {upload_url}")
-                else:
-                    print(f"❌ Upload failed for {file_path.name}")
-            except Exception as e:
-                print(f"❌ Error uploading file {idx}: {e}")
-                import traceback
-                traceback.print_exc()
-            
-            # Cleanup
-            try:
-                file_path.unlink()
-                print(f"✅ Cleaned up: {file_path}")
-            except Exception as e:
-                print(f"Warning: Could not delete {file_path}: {e}")
+                    uploaded_files.append({'filename': file_path.name, 'url': upload_url})
+                
+                if file_path.exists():
+                    file_path.unlink()
         
-        # Send final result
-        print(f"\n{'='*50}")
-        print(f"Upload process completed")
-        print(f"Successful uploads: {len(uploaded_files)}/{len(files)}")
-        print(f"{'='*50}")
-        
+        # Hasil Akhir
         if uploaded_files:
-            result_text = f"""
-✅ <b>Upload Complete</b>
-
-🆔 <b>Session:</b> <code>{SESSION_ID}</code>
-🎯 <b>Service:</b> {SERVICE.upper()}
-📦 <b>Files:</b> {len(uploaded_files)}/{len(files)}
-
-📎 <b>Download Links:</b>
-
-"""
-            
-            for file in uploaded_files:
-                result_text += f"📄 <b>{file['filename']}</b>\n"
-                result_text += f"🔗 <code>{file['url']}</code>\n\n"
-            
-            result_text += "✨ Upload completed successfully!"
-            
+            result_text = f"✅ <b>Upload Complete</b>\n\n🆔 <b>Session:</b> <code>{SESSION_ID}</code>\n🎯 <b>Service:</b> {SERVICE.upper()}\n📦 <b>Files:</b> {len(uploaded_files)}/{len(files)}\n\n📎 <b>Links:</b>\n"
+            for f in uploaded_files:
+                result_text += f"📄 <b>{f['filename']}</b>\n🔗 <code>{f['url']}</code>\n\n"
         else:
-            result_text = f"""
-❌ <b>Upload Failed</b>
-
-🆔 <b>Session:</b> <code>{SESSION_ID}</code>
-🎯 <b>Service:</b> {SERVICE.upper()}
-
-No files were uploaded successfully.
-Check GitHub Actions logs for details.
-"""
-        
-        await bot.edit_message_text(
-            chat_id=chat_id,
-            message_id=message_id,
-            text=result_text,
-            parse_mode=ParseMode.HTML
-        )
-        
+            result_text = "❌ <b>Upload Failed</b>\n\nTidak ada file yang berhasil diupload."
+            
+        await bot.edit_message_text(chat_id=chat_id, message_id=message_id, text=result_text, parse_mode=ParseMode.HTML)
         await client.disconnect()
-        print("Workflow completed successfully")
-        
+
     except Exception as e:
-        print(f"❌ FATAL ERROR in upload process: {e}")
-        import traceback
-        traceback.print_exc()
-        
-        try:
-            error_text = f"""
-❌ <b>Upload Failed</b>
-
-🆔 <b>Session:</b> <code>{SESSION_ID}</code>
-🎯 <b>Service:</b> {SERVICE.upper()}
-
-Error: {str(e)[:200]}
-
-Check GitHub Actions logs for full details.
-"""
-            await bot.edit_message_text(
-                chat_id=chat_id,
-                message_id=message_id,
-                text=error_text,
-                parse_mode=ParseMode.HTML
-            )
-        except Exception as send_error:
-            print(f"Could not send error message: {send_error}")
-        
-        try:
-            await client.disconnect()
-        except:
-            pass
+        print(f"❌ Fatal error: {e}")
+        if 'client' in locals(): await client.disconnect()
 
 if __name__ == '__main__':
     asyncio.run(main())
