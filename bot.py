@@ -4,9 +4,14 @@ import asyncio
 import hashlib
 import requests
 from datetime import datetime
+from pathlib import Path
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes, MessageHandler, filters
 from telegram.constants import ParseMode
+
+# Load environment variables from .env file
+from dotenv import load_dotenv
+load_dotenv()
 
 # Configuration
 TELEGRAM_BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN')
