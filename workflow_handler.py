@@ -253,27 +253,35 @@ async def main():
     """Main workflow handler"""
     print(f"Starting upload workflow for session: {SESSION_ID}")
     
-    # Initialize bot
-    bot = Bot(token=TELEGRAM_BOT_TOKEN)
-    
-    chat_id = WORKFLOW_DATA['chat_id']
-    message_id = WORKFLOW_DATA['message_id']
-    files = WORKFLOW_DATA['files']
-    
-    # Initialize Telegram client (userbot) with string session
-    client = TelegramClient(
-        StringSession(TELEGRAM_STRING_SESSION),
-        TELEGRAM_API_ID,
-        TELEGRAM_API_HASH
-    )
-    
-    # Connect without interactive login
-    await client.connect()
-    
-    # Check if authorized
-    if not await client.is_user_authorized():
-        print("❌ String session is invalid or expired!")
-        error_text = f"""
+    try:
+        # Initialize bot
+        print("Initializing Telegram bot...")
+        bot = Bot(token=TELEGRAM_BOT_TOKEN)
+        
+        chat_id = WORKFLOW_DATA['chat_id']
+        message_id = WORKFLOW_DATA['message_id']
+        files = WORKFLOW_DATA['files']
+        
+        print(f"Chat ID: {chat_id}")
+        print(f"Message ID: {message_id}")
+        print(f"Files to process: {len(files)}")
+        
+        # Initialize Telegram client (userbot) with string session
+        print("Initializing Telegram userbot client...")
+        client = TelegramClient(
+            StringSession(TELEGRAM_STRING_SESSION),
+            TELEGRAM_API_ID,
+            TELEGRAM_API_HASH
+        )
+        
+        # Connect without interactive login
+        print("Connecting to Telegram...")
+        await client.connect()
+        
+        # Check if authorized
+        if not await client.is_user_authorized():
+            print("❌ String session is invalid or expired!")
+            error_text = f"""
 ❌ <b>Upload Failed</b>
 
 🆔 <b>Session:</b> <code>{SESSION_ID}</code>
@@ -281,34 +289,68 @@ async def main():
 String session tidak valid atau expired.
 Silakan generate ulang string session.
 """
-        await bot.edit_message_text(
-            chat_id=chat_id,
-            message_id=message_id,
-            text=error_text,
-            parse_mode=ParseMode.HTML
-        )
-        await client.disconnect()
+            await bot.edit_message_text(
+                chat_id=chat_id,
+                message_id=message_id,
+                text=error_text,
+                parse_mode=ParseMode.HTML
+            )
+            await client.disconnect()
+            return
+        
+        print("✅ Telegram client connected and authorized")
+    
+    except Exception as e:
+        print(f"❌ Error during initialization: {e}")
+        import traceback
+        traceback.print_exc()
+        
+        try:
+            error_text = f"""
+❌ <b>Upload Failed</b>
+
+🆔 <b>Session:</b> <code>{SESSION_ID}</code>
+
+Initialization error: {str(e)}
+"""
+            bot = Bot(token=TELEGRAM_BOT_TOKEN)
+            await bot.edit_message_text(
+                chat_id=WORKFLOW_DATA['chat_id'],
+                message_id=WORKFLOW_DATA['message_id'],
+                text=error_text,
+                parse_mode=ParseMode.HTML
+            )
+        except:
+            pass
         return
     
-    print("✅ Telegram client connected and authorized")
+    try:
     
-    # Get API key based on service
-    api_key = None
-    if SERVICE.lower() == 'pixeldrain':
-        api_key = PIXELDRAIN_API_KEY
-    elif SERVICE.lower() == 'gofile':
-        api_key = GOFILE_API_KEY
-    elif SERVICE.lower() == 'catbox':
-        api_key = CATBOX_USER_HASH
-    
-    uploader = FileUploader(SERVICE, api_key)
-    
-    uploaded_files = []
-    
-    for idx, file_info in enumerate(files, 1):
-        # Check cancellation
-        if await check_cancellation():
-            status_text = f"""
+    try:
+        # Get API key based on service
+        api_key = None
+        if SERVICE.lower() == 'pixeldrain':
+            api_key = PIXELDRAIN_API_KEY
+        elif SERVICE.lower() == 'gofile':
+            api_key = GOFILE_API_KEY
+        elif SERVICE.lower() == 'catbox':
+            api_key = CATBOX_USER_HASH
+        
+        print(f"Service: {SERVICE}")
+        print(f"API Key configured: {bool(api_key)}")
+        
+        uploader = FileUploader(SERVICE, api_key)
+        
+        uploaded_files = []
+        
+        for idx, file_info in enumerate(files, 1):
+            print(f"\n{'='*50}")
+            print(f"Processing file {idx}/{len(files)}")
+            print(f"{'='*50}")
+            
+            # Check cancellation
+            if await check_cancellation():
+                status_text = f"""
 ❌ <b>Upload Cancelled</b>
 
 🆔 <b>Session:</b> <code>{SESSION_ID}</code>
@@ -316,31 +358,39 @@ Silakan generate ulang string session.
 
 Upload was cancelled by user.
 """
-            await bot.edit_message_text(
-                chat_id=chat_id,
-                message_id=message_id,
-                text=status_text,
-                parse_mode=ParseMode.HTML
+                await bot.edit_message_text(
+                    chat_id=chat_id,
+                    message_id=message_id,
+                    text=status_text,
+                    parse_mode=ParseMode.HTML
+                )
+                break
+            
+            # Create progress tracker
+            progress_tracker = ProgressTracker(
+                bot, chat_id, message_id, SESSION_ID, 0, f"File {idx}"
             )
-            break
-        
-        # Create progress tracker
-        progress_tracker = ProgressTracker(
-            bot, chat_id, message_id, SESSION_ID, 0, f"File {idx}"
-        )
-        
-        # Download from Telegram
-        print(f"Downloading file {idx}/{len(files)}")
-        file_path = await download_from_telegram(client, file_info, progress_tracker)
-        
-        if not file_path:
-            print(f"Failed to download file {idx}")
-            continue
-        
-        # Upload to service
-        print(f"Uploading to {SERVICE}")
-        
-        status_text = f"""
+            
+            # Download from Telegram
+            print(f"Downloading file {idx}/{len(files)}")
+            try:
+                file_path = await download_from_telegram(client, file_info, progress_tracker)
+                
+                if not file_path:
+                    print(f"Failed to download file {idx}")
+                    continue
+                
+                print(f"✅ Downloaded: {file_path}")
+            except Exception as e:
+                print(f"❌ Error downloading file {idx}: {e}")
+                import traceback
+                traceback.print_exc()
+                continue
+            
+            # Upload to service
+            print(f"Uploading to {SERVICE}")
+            
+            status_text = f"""
 📤 <b>Uploading</b>
 
 🆔 <b>Session:</b> <code>{SESSION_ID}</code>
@@ -352,30 +402,49 @@ Upload was cancelled by user.
 
 File {idx}/{len(files)}
 """
+            
+            try:
+                await bot.edit_message_text(
+                    chat_id=chat_id,
+                    message_id=message_id,
+                    text=status_text,
+                    parse_mode=ParseMode.HTML
+                )
+            except Exception as e:
+                print(f"Error updating status: {e}")
+            
+            try:
+                upload_url = await uploader.upload(file_path)
+                
+                if upload_url:
+                    uploaded_files.append({
+                        'filename': file_path.name,
+                        'url': upload_url,
+                        'service': SERVICE
+                    })
+                    print(f"✅ Uploaded: {upload_url}")
+                else:
+                    print(f"❌ Upload failed for {file_path.name}")
+            except Exception as e:
+                print(f"❌ Error uploading file {idx}: {e}")
+                import traceback
+                traceback.print_exc()
+            
+            # Cleanup
+            try:
+                file_path.unlink()
+                print(f"✅ Cleaned up: {file_path}")
+            except Exception as e:
+                print(f"Warning: Could not delete {file_path}: {e}")
         
-        await bot.edit_message_text(
-            chat_id=chat_id,
-            message_id=message_id,
-            text=status_text,
-            parse_mode=ParseMode.HTML
-        )
+        # Send final result
+        print(f"\n{'='*50}")
+        print(f"Upload process completed")
+        print(f"Successful uploads: {len(uploaded_files)}/{len(files)}")
+        print(f"{'='*50}")
         
-        upload_url = await uploader.upload(file_path)
-        
-        if upload_url:
-            uploaded_files.append({
-                'filename': file_path.name,
-                'url': upload_url,
-                'service': SERVICE
-            })
-            print(f"Uploaded: {upload_url}")
-        
-        # Cleanup
-        file_path.unlink()
-    
-    # Send final result
-    if uploaded_files:
-        result_text = f"""
+        if uploaded_files:
+            result_text = f"""
 ✅ <b>Upload Complete</b>
 
 🆔 <b>Session:</b> <code>{SESSION_ID}</code>
@@ -385,32 +454,63 @@ File {idx}/{len(files)}
 📎 <b>Download Links:</b>
 
 """
-        
-        for file in uploaded_files:
-            result_text += f"📄 <b>{file['filename']}</b>\n"
-            result_text += f"🔗 <code>{file['url']}</code>\n\n"
-        
-        result_text += "✨ Upload completed successfully!"
-        
-    else:
-        result_text = f"""
+            
+            for file in uploaded_files:
+                result_text += f"📄 <b>{file['filename']}</b>\n"
+                result_text += f"🔗 <code>{file['url']}</code>\n\n"
+            
+            result_text += "✨ Upload completed successfully!"
+            
+        else:
+            result_text = f"""
 ❌ <b>Upload Failed</b>
 
 🆔 <b>Session:</b> <code>{SESSION_ID}</code>
 🎯 <b>Service:</b> {SERVICE.upper()}
 
 No files were uploaded successfully.
+Check GitHub Actions logs for details.
 """
-    
-    await bot.edit_message_text(
-        chat_id=chat_id,
-        message_id=message_id,
-        text=result_text,
-        parse_mode=ParseMode.HTML
-    )
-    
-    await client.disconnect()
-    print("Workflow completed")
+        
+        await bot.edit_message_text(
+            chat_id=chat_id,
+            message_id=message_id,
+            text=result_text,
+            parse_mode=ParseMode.HTML
+        )
+        
+        await client.disconnect()
+        print("Workflow completed successfully")
+        
+    except Exception as e:
+        print(f"❌ FATAL ERROR in upload process: {e}")
+        import traceback
+        traceback.print_exc()
+        
+        try:
+            error_text = f"""
+❌ <b>Upload Failed</b>
+
+🆔 <b>Session:</b> <code>{SESSION_ID}</code>
+🎯 <b>Service:</b> {SERVICE.upper()}
+
+Error: {str(e)[:200]}
+
+Check GitHub Actions logs for full details.
+"""
+            await bot.edit_message_text(
+                chat_id=chat_id,
+                message_id=message_id,
+                text=error_text,
+                parse_mode=ParseMode.HTML
+            )
+        except Exception as send_error:
+            print(f"Could not send error message: {send_error}")
+        
+        try:
+            await client.disconnect()
+        except:
+            pass
 
 if __name__ == '__main__':
     asyncio.run(main())
